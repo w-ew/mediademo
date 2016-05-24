@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+
+<!--
+Loosely based on:
+http://thecodeplayer.com/experiment/3d-perspective-projection-canvas-javascript/11
+-->
+
+<html>
+<head>
+	<meta charset="UTF-8">
+	<title></title>
+	<style type="text/css">
+		body {background-color:#000000; color:#555555; font-size: 12px;} 
+	</style>
+</head>
+<body>
+	<canvas id="canvasOne" width="320" height="320" style="border: 1px solid #201010;">
+		Your browser does not support HTML5 canvas.
+	</canvas>
+	<div><p>
+		<span style='color:#C02040'>Accelerometer</span>
+		&#183;
+		<span style='color:#4060C0'>Magnetometer</span>
+		<br>
+		Use &#9664; and &#9654; to rotate, SPACE to reset.
+	</p></div>
+	<div id='status_div'></div>
+
+	<script type="text/javascript">
+window.addEventListener("load", canvasApp, false);
+
+function canvasApp() {
+	
+	var theCanvas = document.getElementById("canvasOne");
+	var context = theCanvas.getContext("2d");
+	
+	var displayWidth;
+	var displayHeight;
+
+	var particleList_accel = [];
+	var particleList_mag = [];
+	var numParticles = 200;
+
+	var particleRad = 4;
+
+	var fLen = 320;
+	var zMax = fLen - 2;
+
+	var projCenterX;
+	var projCenterY;
+	var zeroAlphaDepth = -750;
+
+	color_accel = [ 192, 32, 64 ];
+	color_mag = [ 64, 96, 192 ];
+
+	//var turnAngle;
+	//var turnSpeed;
+	var worldScale = 280;
+	var worldCenterX = 0;
+	var worldCenterY = 0;
+	var worldCenterZ = -400;
+
+	var turnAngle = 0;
+	var turnSpeed = 0;
+
+	init();
+	
+	function init() {
+
+		displayWidth = theCanvas.width;
+		displayHeight = theCanvas.height;
+				
+		//projection center coordinates sets location of origin
+		projCenterX = displayWidth/2;
+		projCenterY = displayHeight/2;
+		
+		window.addEventListener("keydown", keyDown, false);
+		window.addEventListener("keyup", keyUp, false);
+
+		setInterval(Update, 20);
+	};
+	
+	function keyDown(e) {
+		if(e.keyCode == 37) turnSpeed = +0.01;
+		if(e.keyCode == 39) turnSpeed = -0.01;
+		if(e.keyCode == 32) turnAngle =  0.00;
+	};
+	function keyUp(e) {
+		if((e.keyCode == 37) || (e.keyCode == 39)) turnSpeed = 0;
+	};
+
+
+
+	function Update() {
+		var xhttp = new XMLHttpRequest();
+	
+		xhttp_url = 'http://' + window.location.hostname + ':8080/imu';
+
+		xhttp.open("GET", xhttp_url, true);
+
+		xhttp.onreadystatechange = function(evt) {
+			if(xhttp.readyState == XMLHttpRequest.DONE && xhttp.status == 200) { 
+
+				xyz = JSON.parse(xhttp.response);
+
+				particleList_accel.push(addParticle(
+					xyz.a_x *  worldScale + worldCenterX,
+					xyz.a_y *  worldScale + worldCenterY,
+					xyz.a_z * -worldScale + worldCenterZ,
+					color_accel));
+
+				particleList_mag.push(addParticle(
+					xyz.m_x *  worldScale + worldCenterX,
+					xyz.m_y *  worldScale + worldCenterY,
+					xyz.m_z * -worldScale + worldCenterZ,
+					color_mag));
+
+				if(particleList_accel.length >= numParticles) particleList_accel.shift();
+				if(particleList_mag.length >= numParticles) particleList_mag.shift();
+
+				Redraw();
+			};
+		};
+		xhttp.send();
+
+	};
+
+	function Redraw() {
+
+		context.fillStyle = "#000000";
+		context.fillRect(0,0,displayWidth,displayHeight);
+
+		drawParticleList(particleList_accel);
+		drawParticleList(particleList_mag);
+
+	};
+
+	function drawParticleList(particleList) {
+		
+		// update viewing angle
+		turnAngle = (turnAngle + turnSpeed);
+		if(turnAngle > Math.PI/4) turnAngle = Math.PI/4;
+		if(turnAngle < -Math.PI/4) turnAngle = -Math.PI/4;
+		sinAngle = Math.sin(turnAngle);
+		cosAngle = Math.cos(turnAngle);
+
+		var prevX = null, prevY;
+		var p, i;
+
+		for (i = 0; p = particleList[i]; i++) {
+
+			var rotX, rotY, rotZ;
+			var projX, projY;
+
+			p.age++;
+			p.alpha = 1 - p.age * 0.004;
+
+			rotX = p.x - worldCenterX;
+			rotY = p.y - worldCenterY;
+			rotZ = p.z - worldCenterZ;
+
+			rotX = rotX * cosAngle - rotZ * sinAngle;
+			rotY = rotY;
+			rotZ = rotX * sinAngle + rotZ * cosAngle;
+
+			rotX += worldCenterX;
+			rotY += worldCenterY;
+			rotZ += worldCenterZ;
+
+
+			var m = fLen/(fLen - rotZ);
+			projX = rotX*m + projCenterX;
+			projY = rotY*m + projCenterY;
+
+			//if ((projX > displayWidth)||(projX<0)||(projY<0)||(projY>displayHeight)||(rotZ>zMax)) {
+			//	continue;
+			//};
+
+			//depth-dependent darkening
+			depthAlphaFactor = (1-rotZ/zeroAlphaDepth);
+			depthAlphaFactor = (depthAlphaFactor > 1) ? 1 : ((depthAlphaFactor<0) ? 0 : depthAlphaFactor);
+			var color = rgba(p.color, depthAlphaFactor*p.alpha)
+			
+			//draw
+			context.beginPath();
+			context.fillStyle = color;
+			context.strokeStyle = color;
+			context.lineWidth = m*particleRad;
+			//context.arc(projX, projY, m*particleRad, 0, 2*Math.PI, false);
+			if(prevX !== null) {
+				context.moveTo(projX, projY);
+				context.lineTo(prevX, prevY);
+			};
+			context.closePath();
+
+			context.stroke();
+			//context.fill();
+
+			prevX = projX;
+			prevY = projY;					
+		};
+	};
+			
+	function addParticle(x0,y0,z0, color) {
+		var newParticle = {}
+		
+		newParticle.x = x0;
+		newParticle.y = y0;
+		newParticle.z = z0;
+		newParticle.age = 0;
+		newParticle.color = color;
+
+		return newParticle;		
+	};
+
+	function rgba(rgb, a) { 
+		return "rgba("+rgb[0]+","+rgb[1]+","+rgb[2]+","+a+")"; 
+	};
+};
+</script>
+</body>
+</html>

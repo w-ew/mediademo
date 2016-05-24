@@ -1,0 +1,183 @@
+
+<!DOCTYPE html>
+<!--
+Copyright 2012 Google Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+     http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+
+Author: Eric Bidelman (ericbidelman@chromium.org)
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="X-UA-Compatible" content="chrome=1" />
+<title>Web Audio API createMediaSourceElement() Example</title>
+<link href="common.css" rel="stylesheet" type="text/css">
+<style>
+html, body {
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+}
+body > section {
+  display: -webkit-flex;
+  -webkit-flex-direction: column;
+  -webkit-justify-content: center;
+  -webkit-align-content: center;
+  -webkit-align-items: center;
+  box-sizing: border-box;
+  height: 100%;
+  -webkit-perspective: 800;
+  -webkit-transform-style: preserve-3d;
+}
+//section > * {
+//  display: -webkit-flex;
+//  -webkit-align-items: center;
+//}
+.fft {
+  position: absolute;
+  -webkit-box-reflect: below 5px -webkit-linear-gradient(top, transparent, transparent 50%, rgba(255,255,255,0.2));
+}
+#fft {
+  -webkit-transform: rotateX(-30deg) rotateY(30deg);
+}
+#fft2 {
+  -webkit-transform: translateY(10px) translateX(10px) rotateX(-30deg) rotateY(30deg);
+}
+aside {
+  position: absolute;
+  left: 1em;
+  top: 3em;
+  z-index: 10;
+}
+label {
+  cursor: pointer;
+}
+#myaudio {
+  opacity: 0;
+  -webkit-transition: all 0.3s ease-in-out;
+}
+#myaudio.show {
+  opacity: 1;
+}
+
+
+
+</style>
+</head>
+<body>
+
+<!--<section>
+  <div>-->
+
+    <canvas id="fft" class="fft" width="320" height="400"></canvas>
+    <canvas id="fft2" class="fft" width="320" height="400"></canvas>
+	<div id="myaudio"></div>
+<!--  </div>
+</section>-->
+<script>
+
+
+(function() {
+var canvas = document.getElementById('fft');
+var ctx = canvas.getContext('2d');
+//canvas.width = document.body.clientWidth;// / 1.4;
+
+var canvas2 = document.getElementById('fft2');
+var ctx2 = canvas2.getContext('2d');
+//canvas2.width = canvas.width;
+
+const CANVAS_HEIGHT = canvas.height;
+const CANVAS_WIDTH = canvas.width;
+
+window.audio = new Audio();
+audio.crossOrigin = "anonymous";
+audio.src = 'http://' + window.location.hostname + ':8080/audio';
+audio.controls = true;
+//audio.autoplay = true;
+document.querySelector('#myaudio').appendChild(audio);
+document.querySelector('#myaudio').classList.toggle('show');
+
+audio.play();
+
+// Check for non Web Audio API browsers.
+if (!window.webkitAudioContext) {
+  alert("Web Audio isn't available in your browser. But...you can still play the HTML5 audio :)");
+  
+  document.querySelector('aside').style.marginTop = '7em';
+  return;
+}
+
+var context = new webkitAudioContext();
+var analyser = context.createAnalyser();
+analyser.fftSize = 128;
+
+function rafCallback(time) {
+  window.webkitRequestAnimationFrame(rafCallback, canvas);
+
+  var freqByteData = new Uint8Array(analyser.frequencyBinCount);
+  analyser.getByteFrequencyData(freqByteData); //analyser.getByteTimeDomainData(freqByteData);
+
+  var SPACER_WIDTH = 10;
+  var BAR_WIDTH = 5;
+  var OFFSET = 16;
+  var CUTOFF = 23;
+  var numBars = Math.round(CANVAS_WIDTH / SPACER_WIDTH);
+
+  ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+  //ctx.fillStyle = '#F6D565';
+  ctx.fillStyle = '#EF2929';
+  ctx.lineCap = 'round';
+
+  ctx2.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+  //ctx2.fillStyle = '#3A5E8C';
+  ctx2.fillStyle = '#3465A4';
+  ctx2.lineCap = 'round';
+
+  // Draw rectangle for each frequency bin.
+  /*for (var i = 0; i < numBars / 2 - CUTOFF; ++i) {
+    var magnitude = freqByteData[i + OFFSET];
+    ctx.fillRect(i * SPACER_WIDTH, CANVAS_HEIGHT, BAR_WIDTH, -magnitude);
+  }
+  for (var i = numBars / 2 + CUTOFF; i < numBars; ++i) {
+    var magnitude = freqByteData[i + OFFSET];
+    ctx2.fillRect(i * SPACER_WIDTH, CANVAS_HEIGHT, BAR_WIDTH, -magnitude);
+  }*/
+  for (var i = 0; i < 32; ++i) {
+    var magnitude = freqByteData[i + OFFSET] + 3;
+    ctx.fillRect(i * SPACER_WIDTH, CANVAS_HEIGHT, BAR_WIDTH, -magnitude);
+    ctx2.fillRect(i * SPACER_WIDTH, CANVAS_HEIGHT, BAR_WIDTH, -magnitude);
+  }
+}
+
+function onLoad(e) {
+  var source = context.createMediaElementSource(audio);
+  source.connect(analyser);
+  analyser.connect(context.destination);
+
+  rafCallback();
+}
+
+// Need window.onload to fire first. See crbug.com/112368.
+window.addEventListener('load', onLoad, false);
+})();
+
+
+</script>
+
+<!--[if IE]>
+<script src="http://ajax.googleapis.com/ajax/libs/chrome-frame/1/CFInstall.min.js"></script>
+<script>CFInstall.check({mode: 'overlay'});</script>
+<![endif]-->
+</body>
+</html>
